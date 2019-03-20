@@ -1,0 +1,58 @@
+% 改进的帧间差分法
+clc; clear all; close all;
+% 起始帧
+nStar = 1;
+% 读视频文件
+mov = VideoReader('1.avi');
+% 获取视频文件帧个数
+nframes = mov.NumberOfFrames;
+% 第一帧当做初始背景
+Background = double( rgb2gray(read(mov, nStar) ));
+for k = nStar+1 : nframes
+    % 当前帧
+    CurrentImage = double(rgb2gray(read(mov, k) ));
+    % 前一帧
+    FormerImage = double(rgb2gray(read(mov, k-1) ));
+    % 帧间差分
+    difgrayFrame = im2uint8(mat2gray(abs(CurrentImage - FormerImage )));
+    % 迭代法计算二值化阈值
+    th = get_iter_th(difgrayFrame);
+    difBW = im2bw(difgrayFrame, th/255);
+    % 背景更新的速度
+    alpha = 0.1;
+    % 前后两帧有变化的区域不更新，无变化的区域更新到背景中去
+    CurrentBack = Background.*difBW + ( alpha.* CurrentImage + ( 1-alpha ).* Background ).*( 1 - difBW );
+    % 背景更新完毕
+    Background = CurrentBack;
+    % 前景与背景差分
+    Cut = abs(double(CurrentImage) - double(Background));
+    Cut = im2uint8(mat2gray(Cut));
+    % 迭代法计算二值化阈值
+    cutT = get_iter_th(Cut);
+    % 差分后的图像进行二值化
+    cutBW = im2bw(Cut, cutT/255);
+    % 结构元素
+    SE = ones(5, 5);
+    % 对二值图像进行腐蚀，以消除微小变动区域
+    CuterBW = imclose(cutBW, SE);
+    figure(1);
+    subplot(1,3,1), imshow(CurrentImage, []), title(['第' num2str(k) '帧']);
+    subplot(1,3,2), imshow(Cut, []), title('差分后的图像');
+    subplot(1,3,3), imshow(CurrentImage, []), title('目标定位')
+    % 找出图像中的八连通区域，视为目标所在的区域
+    [L, ~] = bwlabel(CuterBW, 8);
+    % 找出最大区域
+    stats = regionprops(L);
+    % 整合
+    Ar = cat(1, stats.Area);
+    % 最大区域
+    [~, ind_max_ar] = max(Ar);
+    % 提取目标
+    rect = stats(ind_max_ar).BoundingBox;
+    if rect(4) > size(CurrentImage, 2)*0.25 && rect(4) < size(CurrentImage, 2)*0.5
+        % 对前景用矩形标记
+        rectangle('Position', rect, 'EdgeColor', 'r');
+    end    
+    pause(0.001);
+end
+
